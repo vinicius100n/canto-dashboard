@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canto Fashion — Dashboard Executivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0f;--surface:#111118;--card:#16161f;--border:#23232e;
+  --accent:#c8a96e;--accent2:#7c6fcd;--accent3:#4ecdc4;
+  --red:#ff5a5a;--green:#3dd68c;--text:#e8e8f0;--muted:#6b6b80;
+  --serif:'DM Serif Display',Georgia,serif;
+  --mono:'DM Mono',monospace;
+  --sans:'Syne',sans-serif;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 36px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;background:rgba(10,10,15,.95);backdrop-filter:blur(20px)}
+.logo-name{font-family:var(--serif);font-size:1.4rem;color:var(--accent)}
+.logo-tag{font-family:var(--mono);font-size:.67rem;color:var(--muted);text-transform:uppercase;letter-spacing:.15em;margin-left:10px}
+.hright{display:flex;align-items:center;gap:12px}
+.pw{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.69rem;color:var(--muted)}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);font-size:.69rem;padding:6px 14px;border-radius:4px;cursor:pointer;transition:all .2s;text-transform:uppercase;letter-spacing:.1em}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+#co{position:fixed;inset:0;background:rgba(0,0,0,.88);backdrop-filter:blur(8px);z-index:900;display:flex;align-items:center;justify-content:center}
+#cb{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:40px;width:520px;max-width:95vw}
+#cb h2{font-family:var(--serif);font-size:1.5rem;color:var(--accent);margin-bottom:8px}
+#cb p{color:var(--muted);font-size:.84rem;line-height:1.6;margin-bottom:24px}
+.cl{font-family:var(--mono);font-size:.67rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);display:block;margin-bottom:8px}
+.ci{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:.84rem;padding:10px 14px;outline:none;transition:border-color .2s;margin-bottom:16px}
+.ci:focus{border-color:var(--accent)}
+#cs{width:100%;background:var(--accent);color:#0a0a0f;border:none;border-radius:6px;font-family:var(--sans);font-weight:700;font-size:.88rem;padding:13px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;transition:opacity .2s}
+#cs:hover{opacity:.88}
+main{padding:28px 36px;max-width:1600px;margin:0 auto}
+.ks{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:26px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px 22px;transition:border-color .2s,transform .2s;position:relative;overflow:hidden}
+.kpi:hover{border-color:var(--accent);transform:translateY(-2px)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;transition:opacity .3s}
+.kpi:hover::before{opacity:1}
+.kl{font-family:var(--mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.15em;color:var(--muted);margin-bottom:10px}
+.kv{font-family:var(--serif);font-size:1.85rem;line-height:1;margin-bottom:7px}
+.ks2{font-family:var(--mono);font-size:.71rem}
+.up{color:var(--green)}.down{color:var(--red)}.neu{color:var(--muted)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+.s2{grid-column:span 2}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:22px}
+.ch{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.ct{font-family:var(--sans);font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:.1em}
+.cs{font-family:var(--mono);font-size:.67rem;color:var(--muted)}
+.cw{position:relative;height:220px}
+.cwt{position:relative;height:270px}
+.tw{overflow-x:auto;max-height:260px;overflow-y:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:.78rem}
+.tbl th{font-family:var(--mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-align:left;padding:0 8px 10px;border-bottom:1px solid var(--border)}
+.tbl td{padding:8px;border-bottom:1px solid rgba(35,35,46,.5)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(200,169,110,.04)}
+.tag{display:inline-block;font-family:var(--mono);font-size:.61rem;padding:2px 8px;border-radius:20px;text-transform:uppercase}
+.tr{background:rgba(255,90,90,.12);color:var(--red)}
+.tg{background:rgba(61,214,140,.12);color:var(--green)}
+.ty{background:rgba(200,169,110,.15);color:var(--accent)}
+.tb{background:rgba(78,205,196,.12);color:var(--accent3)}
+.ld{display:flex;align-items:center;justify-content:center;height:80px;color:var(--muted);font-family:var(--mono);font-size:.77rem;gap:10px}
+.sp{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+footer{text-align:center;padding:20px;font-family:var(--mono);font-size:.65rem;color:var(--muted);border-top:1px solid var(--border);margin-top:12px}
+@media(max-width:1100px){.ks{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){main{padding:14px}header{padding:14px 18px}.ks{grid-template-columns:1fr 1fr;gap:10px}.g2{grid-template-columns:1fr}.s2{grid-column:span 1}}
+</style>
+</head>
+<body>
+<div id="co">
+  <div id="cb">
+    <h2>Configuração</h2>
+    <p>Informe o ID da planilha Google Sheets.<br>
+    A planilha precisa ter <b>Acesso geral → Qualquer pessoa com o link → Leitor</b>
+    e estar publicada em <b>Arquivo → Compartilhar → Publicar na web</b>.</p>
+    <label class="cl">Spreadsheet ID</label>
+    <input class="ci" id="cfg-id" type="text" placeholder="1youM0jB-ZXWJvjatF2FIYgqPYQWQYvXxNc52mJDXdQ4">
+    <button id="cs">Salvar e carregar dashboard</button>
+  </div>
+</div>
+<header>
+  <div><span class="logo-name">Canto Fashion</span><span class="logo-tag">/ Dashboard Executivo</span></div>
+  <div class="hright">
+    <div class="pw"><div class="pulse"></div><span id="ut">–</span></div>
+    <button class="btn" onclick="loadAll()">↻ Atualizar</button>
+    <button class="btn" onclick="document.getElementById('co').style.display='flex'">⚙ Config</button>
+  </div>
+</header>
+<main>
+  <div class="ks">
+    <div class="kpi"><div class="kl">Faturamento do Mês</div><div class="kv" id="kfm">–</div><div class="ks2 neu" id="kfd">vs. mês anterior</div></div>
+    <div class="kpi"><div class="kl">Faturamento Hoje</div><div class="kv" id="kfh">–</div><div class="ks2 neu">acumulado do dia</div></div>
+    <div class="kpi"><div class="kl">A Receber (30d)</div><div class="kv" id="krec">–</div><div class="ks2 down" id="krecv">–</div></div>
+    <div class="kpi"><div class="kl">A Pagar (30d)</div><div class="kv" id="kpag">–</div><div class="ks2 down" id="kpagv">–</div></div>
+  </div>
+  <div class="g2">
+    <div class="card s2">
+      <div class="ch"><span class="ct">Faturamento Mensal</span><span class="cs">últimos 12 meses</span></div>
+      <div class="cwt"><canvas id="cmen"></canvas></div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="ch"><span class="ct">Faturamento Diário</span><span class="cs">últimos 30 dias</span></div>
+      <div class="cw"><canvas id="cdia"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">DRE — Custos por Grupo</span><span class="cs">mês atual</span></div>
+      <div class="cw"><canvas id="cdre"></canvas></div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="ch"><span class="ct">Contas a Receber</span><span class="cs">próximos lançamentos</span></div>
+      <div class="tw"><table class="tbl" id="trec"><thead><tr><th>Vencimento</th><th>Cliente</th><th>Saldo</th><th>Status</th></tr></thead><tbody><tr><td colspan="4"><div class="ld"><div class="sp"></div>Carregando...</div></td></tr></tbody></table></div>
+    </div>
+    <div class="card">
+      <div class="ch"><span class="ct">Contas a Pagar</span><span class="cs">próximos lançamentos</span></div>
+      <div class="tw"><table class="tbl" id="tpag"><thead><tr><th>Vencimento</th><th>Fornecedor</th><th>Saldo</th><th>Status</th></tr></thead><tbody><tr><td colspan="4"><div class="ld"><div class="sp"></div>Carregando...</div></td></tr></tbody></table></div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card s2">
+      <div class="ch"><span class="ct">Estoque — Top Produtos por Valor</span><span class="cs" id="kest">–</span></div>
+      <div class="tw"><table class="tbl" id="test"><thead><tr><th>Produto</th><th>Referência</th><th>Grupo</th><th>Filial</th><th>Qtd</th><th>Custo Unit.</th><th>Valor Total</th></tr></thead><tbody><tr><td colspan="7"><div class="ld"><div class="sp"></div>Carregando...</div></td></tr></tbody></table></div>
+    </div>
+  </div>
+</main>
+<footer id="ftr">Dashboard Canto Fashion · atualização automática a cada 30 minutos</footer>
+<script>
+const KEY='canto_sid';
+let SID=localStorage.getItem(KEY)||'';
+const REFRESH=30*60*1000;
+const CH={};
+Chart.defaults.color='#6b6b80';
+Chart.defaults.font.family="'DM Mono',monospace";
+Chart.defaults.font.size=11;
+Chart.defaults.plugins.legend.display=false;
+
+const brl=v=>(parseFloat(v)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:0,maximumFractionDigits:0});
+const pct=(a,b)=>b?(((a-b)/b)*100).toFixed(1):null;
+
+async function fetchSheet(name){
+  const url=`https://docs.google.com/spreadsheets/d/${SID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}&t=${Date.now()}`;
+  const res=await fetch(url);
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  const txt=await res.text();
+  if(txt.includes('Signin')||txt.includes('accounts.google')) throw new Error('Planilha não pública');
+  return parseCSV(txt);
+}
+
+function parseCSV(txt){
+  const lines=txt.trim().split('\n');
+  const hdr=csvLine(lines[0]);
+  return lines.slice(1).map(l=>{
+    const v=csvLine(l),o={};
+    hdr.forEach((h,i)=>o[cl(h)]=cl(v[i]||''));
+    return o;
+  });
+}
+function cl(s){return s.trim().replace(/^"|"$/g,'')}
+function csvLine(line){
+  const re=/(?:^|,)("(?:[^"]*(?:""[^"]*)*)"|[^,]*)/g,r=[];
+  let m;while((m=re.exec(line))!==null)r.push(m[1]);return r;
+}
+
+function barChart(id,labels,data,color='#c8a96e'){
+  if(CH[id])CH[id].destroy();
+  CH[id]=new Chart(document.getElementById(id).getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:color+'33',borderColor:color,borderWidth:1.5,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{tooltip:{callbacks:{label:c=>brl(c.raw)}}},
+      scales:{x:{grid:{color:'#23232e'},ticks:{maxRotation:45}},y:{grid:{color:'#23232e'},ticks:{callback:v=>brl(v)}}}}
+  });
+}
+
+function donutChart(id,labels,data){
+  if(CH[id])CH[id].destroy();
+  const C=['#c8a96e','#7c6fcd','#4ecdc4','#ff5a5a','#3dd68c','#f5a623','#9b59b6','#e74c3c'];
+  CH[id]=new Chart(document.getElementById(id).getContext('2d'),{
+    type:'doughnut',
+    data:{labels,datasets:[{data,backgroundColor:C.slice(0,data.length).map(c=>c+'bb'),borderColor:C.slice(0,data.length),borderWidth:1.5}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'60%',
+      plugins:{legend:{display:true,position:'right',labels:{boxWidth:10,padding:12}},
+        tooltip:{callbacks:{label:c=>`${c.label}: ${brl(c.raw)}`}}}}
+  });
+}
+
+function stag(s){
+  if(!s)return'';
+  if(s==='VENCIDA')return'<span class="tag tr">Vencida</span>';
+  if(s==='VENCE_HOJE')return'<span class="tag ty">Hoje</span>';
+  if(s==='PAGO')return'<span class="tag tg">Pago</span>';
+  return'<span class="tag tb">A vencer</span>';
+}
+
+async function loadKPIs(){
+  const rows=await fetchSheet('kpis');
+  if(!rows.length)return;
+  const r=rows[0];
+  const fm=parseFloat(r.fat_mes_atual)||0,fa=parseFloat(r.fat_mes_anterior)||0;
+  const fh=parseFloat(r.fat_hoje)||0;
+  const rc=parseFloat(r.receber_30dias)||0,rv=parseFloat(r.receber_vencido)||0;
+  const pc=parseFloat(r.pagar_30dias)||0,pv=parseFloat(r.pagar_vencido)||0;
+  document.getElementById('kfm').textContent=brl(fm);
+  const d=pct(fm,fa);
+  if(d!==null){const el=document.getElementById('kfd');el.textContent=`${+d>=0?'▲':'▼'} ${Math.abs(d)}% vs mês anterior`;el.className=`ks2 ${+d>=0?'up':'down'}`}
+  document.getElementById('kfh').textContent=brl(fh);
+  document.getElementById('krec').textContent=brl(rc);
+  document.getElementById('krecv').textContent=rv>0?`⚠ ${brl(rv)} vencidos`:'✓ Sem vencidos';
+  document.getElementById('kpag').textContent=brl(pc);
+  document.getElementById('kpagv').textContent=pv>0?`⚠ ${brl(pv)} vencidos`:'✓ Sem vencidos';
+  const ua=r.ultima_atualizacao||'';
+  if(ua)document.getElementById('ut').textContent=`Atualizado: ${ua.slice(0,16).replace('T',' ')}`;
+}
+
+async function loadFatMensal(){
+  const rows=await fetchSheet('faturamento_mensal');
+  const s=rows.slice().sort((a,b)=>a.mes<b.mes?-1:1);
+  barChart('cmen',s.map(r=>r.mes),s.map(r=>parseFloat(r.faturamento)||0),'#c8a96e');
+}
+
+async function loadFatDiario(){
+  const rows=await fetchSheet('faturamento_diario');
+  const s=rows.slice().sort((a,b)=>a.data<b.data?-1:1).slice(-30);
+  barChart('cdia',s.map(r=>(r.data||'').slice(5)),s.map(r=>parseFloat(r.faturamento)||0),'#4ecdc4');
+}
+
+async function loadDRE(){
+  const rows=await fetchSheet('dre_mensal');
+  const mm=rows.reduce((a,r)=>r.mes>a?r.mes:a,'');
+  const f=rows.filter(r=>r.mes===mm);
+  const g={};
+  f.forEach(r=>{const k=r.gru_desc||r.descricao||'Outros';g[k]=(g[k]||0)+(parseFloat(r.valor)||0);});
+  donutChart('cdre',Object.keys(g),Object.values(g));
+}
+
+async function loadContas(aba,tid,col){
+  const rows=await fetchSheet(aba);
+  const tb=document.querySelector(`#${tid} tbody`);
+  if(!rows.length){tb.innerHTML='<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:20px">Sem lançamentos</td></tr>';return;}
+  tb.innerHTML=rows.slice(0,50).map(r=>`<tr>
+    <td style="font-family:var(--mono);font-size:.74rem">${r.dt_vencimento||r.data_vencimento||'–'}</td>
+    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r[col]||'–'}</td>
+    <td style="font-family:var(--mono);text-align:right">${brl(r.saldo||r.sal_devedor||r.vr_parcela)}</td>
+    <td>${stag(r.situacao)}</td></tr>`).join('');
+}
+
+async function loadEstoque(){
+  const rows=await fetchSheet('estoque');
+  const tb=document.querySelector('#test tbody');
+  if(!rows.length){tb.innerHTML='<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:20px">Sem dados</td></tr>';return;}
+  const total=rows.reduce((s,r)=>s+(parseFloat(r.custo_total)||0),0);
+  document.getElementById('kest').textContent=`Valor total: ${brl(total)}`;
+  tb.innerHTML=rows.slice(0,50).map(r=>`<tr>
+    <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.pro_descricao||'–'}</td>
+    <td style="font-family:var(--mono);font-size:.74rem">${r.referencia||'–'}</td>
+    <td>${r.gru_descricao||'–'}</td>
+    <td style="font-family:var(--mono)">${r.filial||'–'}</td>
+    <td style="font-family:var(--mono);text-align:right">${parseInt(r.quantidade)||0}</td>
+    <td style="font-family:var(--mono);text-align:right">${brl(r.custo_unitario)}</td>
+    <td style="font-family:var(--mono);text-align:right;color:var(--accent)">${brl(r.custo_total)}</td></tr>`).join('');
+}
+
+async function loadAll(){
+  document.getElementById('ut').textContent='Carregando...';
+  await Promise.all([
+    loadKPIs().catch(e=>console.warn('KPIs:',e)),
+    loadFatMensal().catch(e=>console.warn('FatMensal:',e)),
+    loadFatDiario().catch(e=>console.warn('FatDiario:',e)),
+    loadDRE().catch(e=>console.warn('DRE:',e)),
+    loadContas('contas_receber','trec','cliente_nome').catch(e=>console.warn('CR:',e)),
+    loadContas('contas_pagar','tpag','fornecedor_nome').catch(e=>console.warn('CP:',e)),
+    loadEstoque().catch(e=>console.warn('Est:',e)),
+  ]);
+  document.getElementById('ftr').textContent=`Dashboard Canto Fashion · última carga: ${new Date().toLocaleString('pt-BR')} · atualização a cada 30 min`;
+}
+
+document.getElementById('cs').addEventListener('click',()=>{
+  const id=document.getElementById('cfg-id').value.trim();
+  if(!id){alert('Informe o Spreadsheet ID');return;}
+  SID=id; localStorage.setItem(KEY,id);
+  document.getElementById('co').style.display='none';
+  loadAll();
+});
+
+if(SID){document.getElementById('co').style.display='none';loadAll();}
+else document.getElementById('cfg-id').focus();
+setInterval(loadAll,REFRESH);
+</script>
+</body>
+</html>
