@@ -2158,12 +2158,16 @@ function toggleDRERow(id){
 // ── FETCH ─────────────────────────────────────────────────────────────────────
 async function aplicarDRE(){
   if(!DRE_RAW){
-    try{ DRE_RAW = await fetchSheet('dre_mensal'); }
-    catch(e){ console.warn('DRE fetch:',e); return; }
+    try{
+      // Carregar 4 abas separadas (cada uma pequena o suficiente para o gviz)
+      var fat = await fetchSheet('dre_fat');
+      var dev = await fetchSheet('dre_dev');
+      var cmv = await fetchSheet('dre_cmv');
+      var cus = await fetchSheet('dre_cus');
+      DRE_RAW = fat.concat(dev).concat(cmv).concat(cus);
+      console.log('[DRE] Carregado: fat='+fat.length+' dev='+dev.length+' cmv='+cmv.length+' cus='+cus.length+' total='+DRE_RAW.length);
+    }catch(e){ console.warn('DRE fetch:',e); return; }
   }
-  console.log('[DRE] RAW total:',DRE_RAW.length,'cols:',DRE_RAW.length?Object.keys(DRE_RAW[0]).join(','):'none');
-  var rawParts={};DRE_RAW.forEach(function(r){var p=(r.part||'').trim();rawParts[p]=(rawParts[p]||0)+1;});
-  console.log('[DRE] RAW parts:',JSON.stringify(rawParts));
   calcularDRE();
 }
 
