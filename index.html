@@ -2471,180 +2471,121 @@ function subFAT(rows){
   return Object.entries(agg).sort(function(a,b){return b[1]-a[1];});
 }
 
+
+
 function calcularDRE(){
   var rows = filtrarDRE(DRE_RAW, DRE_STATE.ano, DRE_STATE.mes, DRE_STATE.filial);
-
-  // Debug: contar linhas por PART
   var byPart={};
   rows.forEach(function(r){var p=(r.part||'').trim();byPart[p]=(byPart[p]||0)+1;});
-  console.log('DRE rows por PART:', byPart, 'total:', rows.length);
+  console.log('[DRE] Parts:',JSON.stringify(byPart),'total:',rows.length);
 
-  // ── Linha 1: Receita Operacional Bruta ─────────────────────────────────────
-  // fDREfat: SUM(quantidade * vr_venda) onde operacao IN(1,25)
   var fat = somaFAT(rows);
+  var dev = somaDEV(rows);  // positivo no banco = devolução
 
-  // ── Linha 2: (-) Deduções ──────────────────────────────────────────────────
-  // fDREdev: SUM(-quantidade * vr_venda) — já vem negativo
-  var dev = somaDEV(rows);
-  // Simples Nacional: CUS com dre_grupo='6' OU des_subcateg contendo 'simples'
-  // No Power BI está em Deduções via dPlanoDeContas.xlsx (conta do simples mapeada)
   var simplesVal = rows.filter(function(r){
     if((r.part||'').trim()!=='CUS') return false;
-    var cat = (r.cod_categ||'').trim();
-    var des = (r.des_subcateg||'').toLowerCase();
-    return cat==='6' || des.includes('simples') || des.includes('simei') || des.includes('das ');
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+    var cat=(r.cod_categ||'').trim();
+    var des=(r.des_subcateg||'').toLowerCase();
+    return cat==='6' || des.includes('simples') || des.includes('simei');
+  }).reduce(function(s,r){return s+Math.abs(parseFloat(r.valor)||0);},0);
 
-  var totalDed = dev - simplesVal;  // dev já negativo; simples é positivo → subtrai
-  var recLiq   = fat + totalDed;    // = fat - |dev| - simples
+  var totalDed = -(dev + simplesVal);  // negativo
+  var recLiq   = fat + totalDed;
 
-  // ── Linha 4: (-) Custos Operacionais da Receita ───────────────────────────
-  // CMV: fDREcmv — valor NEGATIVO (custo da mercadoria vendida)
-  var cmv = somaCMV(rows);
-  // Custos Variáveis: CUS dre_grupo='0', exceto simples
+  var cmv = somaCMV(rows);  // já negativo na query
+
   var cusVar0 = rows.filter(function(r){
     if((r.part||'').trim()!=='CUS') return false;
-    if((r.cod_categ||'').trim()!=='0') return false;
+    var cat=(r.cod_categ||'').trim();
+    if(cat!=='0') return false;
     var des=(r.des_subcateg||'').toLowerCase();
-    if(des.includes('simples')||des.includes('simei')||des.includes('das ')) return false;
-    return true;
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+    return !des.includes('simples') && !des.includes('simei');
+  }).reduce(function(s,r){return s+Math.abs(parseFloat(r.valor)||0);},0);
 
   var comissao = rows.filter(function(r){
     return (r.part||'').trim()==='CUS' && (r.cod_categ||'').trim()==='0' &&
            (r.des_subcateg||'').toLowerCase().includes('comiss');
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+  }).reduce(function(s,r){return s+Math.abs(parseFloat(r.valor)||0);},0);
 
-  // totalCOP: CMV (negativo) + custos variáveis (positivos no banco, mas representam saída)
-  var totalCOP = cmv - cusVar0;  // ambos reduzem receita líquida
-  var resB = recLiq + totalCOP;  // resB = recLiq - |cmv| - |cusVar|
+  var totalCOP = cmv - cusVar0;  // ambos reduzem
+  var resB = recLiq + totalCOP;
 
-  // ── Linha 6: (-) Despesas Operacional ─────────────────────────────────────
-  // CUS dre_grupo='1' (Custos Fixos)
-  // Simples foi para Deduções, então aqui só grupo='1'
   var despFix = rows.filter(function(r){
-    if((r.part||'').trim()!=='CUS') return false;
-    var cat=(r.cod_categ||'').trim();
-    return cat==='1';
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+    return (r.part||'').trim()==='CUS' && (r.cod_categ||'').trim()==='1';
+  }).reduce(function(s,r){return s+Math.abs(parseFloat(r.valor)||0);},0);
 
-  console.log('DRE calc: fat='+fat+' dev='+dev+' simples='+simplesVal+
-              ' cmv='+cmv+' cusVar='+cusVar0+' despFix='+despFix);
+  console.log('[DRE] fat='+fat.toFixed(0)+' dev='+dev.toFixed(0)+' simples='+simplesVal.toFixed(0)+' cmv='+cmv.toFixed(0)+' cusVar='+cusVar0.toFixed(0)+' despFix='+despFix.toFixed(0));
 
-  var ebitda = resB - despFix;
-  var noper  = 0;
-  var lucroAntes = ebitda + noper;
-  var cs=0, ir=0;
-  var llq = lucroAntes;
+  var ebitda=resB-despFix, noper=0;
+  var lucroAntes=ebitda+noper, llq=lucroAntes;
 
-  window._DRE_V = {
-    fat:fat, dev:dev, simplesVal:simplesVal, totalDed:totalDed, recLiq:recLiq,
-    cmv:cmv, cusVar:cusVar0, comissao:comissao, totalCOP:totalCOP, resB:resB,
-    despFix:despFix, ebitda:ebitda, noper:noper, lucroAntes:lucroAntes, llq:llq,
-    rows:rows
-  };
+  window._DRE_V={fat:fat,dev:dev,simplesVal:simplesVal,totalDed:totalDed,recLiq:recLiq,
+    cmv:cmv,cusVar:cusVar0,comissao:comissao,totalCOP:totalCOP,resB:resB,
+    despFix:despFix,ebitda:ebitda,noper:noper,lucroAntes:lucroAntes,llq:llq,rows:rows};
 
-  // ── KPIs ──────────────────────────────────────────────────────────────────
-  function setKV(id,v){
-    var el=document.getElementById(id);if(!el)return;
-    el.textContent=brl(v);el.className='kv sm '+(v>=0?'pos-v':'neg-v');
-  }
-  setKV('dre-fat',fat);
-  setKV('dre-ded',totalDed);
-  setKV('dre-liq',recLiq);
-  setKV('dre-bruto',resB);
-  setKV('dre-ebitda',ebitda);
-  setKV('dre-lucro',llq);
-  var lc=document.getElementById('dre-lucro-card');
-  if(lc)lc.className='kcard '+(llq>=0?'grn':'red');
+  function setKV(id,v){var el=document.getElementById(id);if(!el)return;el.textContent=brl(v);el.className='kv sm '+(v>=0?'pos-v':'neg-v');}
+  setKV('dre-fat',fat);setKV('dre-ded',totalDed);setKV('dre-liq',recLiq);
+  setKV('dre-bruto',resB);setKV('dre-ebitda',ebitda);setKV('dre-lucro',llq);
+  var lc=document.getElementById('dre-lucro-card');if(lc)lc.className='kcard '+(llq>=0?'grn':'red');
 
   if(fat>0){
-    var cmvPct = Math.abs(cmv)/fat*100;
-    var cfPct  = despFix/fat*100;
-    setText('dre-cmv-p', cmvPct.toFixed(1)+'%');
+    var cmvPct=Math.abs(cmv)/fat*100, cfPct=despFix/fat*100;
+    setText('dre-cmv-p',cmvPct.toFixed(1)+'%');
     var cb=document.getElementById('dre-cmv-bar');if(cb)cb.style.width=Math.min(cmvPct,100)+'%';
-    setText('dre-cf-p',  cfPct.toFixed(1)+'%');
+    setText('dre-cf-p',cfPct.toFixed(1)+'%');
     var cfb=document.getElementById('dre-cf-bar');if(cfb)cfb.style.width=Math.min(cfPct,100)+'%';
-    var totCusto = Math.abs(totalCOP)+despFix;
-    var cob = totCusto>0?((fat/totCusto)*100).toFixed(1):'0';
-    setText('dre-cob', cob+'%');
+    var totC=Math.abs(totalCOP)+despFix;
+    var cob=totC>0?((fat/totC)*100).toFixed(1):'0';
+    setText('dre-cob',cob+'%');
     var cobB=document.getElementById('dre-cob-bar');if(cobB)cobB.style.width=Math.min(parseFloat(cob)/2,100)+'%';
-    var pe = totCusto>0?Math.round(despFix/((fat-Math.abs(totalCOP||1))/fat)):0;
-    setText('dre-pe','R$'+Math.abs(pe).toLocaleString('pt-BR')+'/mês');
+    if(fat>Math.abs(totalCOP)){var pe=Math.round(despFix/((fat-Math.abs(totalCOP))/fat));setText('dre-pe','R$'+Math.abs(pe).toLocaleString('pt-BR')+'/mês');}
   }
 
-  var subLbl=(DRE_STATE.mes==='Todos'?'Jan–Dez ':''+DRE_STATE.mes+' ')+DRE_STATE.ano+
-             ' · '+(DRE_STATE.filial==='Todas'?'Todas as filiais':DRE_STATE.filial);
+  var subLbl=(DRE_STATE.mes==='Todos'?'Jan-Dez ':''+DRE_STATE.mes+' ')+DRE_STATE.ano+' · '+(DRE_STATE.filial==='Todas'?'Todas as filiais':DRE_STATE.filial);
   setText('dre-sub-lbl',subLbl);
 
-  // ── Cascata ──────────────────────────────────────────────────────────────
   destroyChart('dre-chart-cascata');
   var ce=document.getElementById('dre-chart-cascata');if(ce){
     CH['dre-chart-cascata']=new Chart(ce.getContext('2d'),{type:'bar',
       data:{labels:['Fat. Bruto','Deduções','Rec. Líq.','Cust. Oper.','Res. Bruto','Desp. Op.','EBITDA','Luc. Líq.'],
-        datasets:[{data:[fat, totalDed, recLiq, totalCOP, resB, -despFix, ebitda, llq],
-          backgroundColor:function(ctx){return ctx.raw>=0?'#3dd68c33':'#ff5a5a33';},
-          borderColor:function(ctx){return ctx.raw>=0?'#3dd68c':'#ff5a5a';},
-          borderWidth:1.5,borderRadius:3}]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
-        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
-                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}
-    });
+        datasets:[{data:[fat,totalDed,recLiq,totalCOP,resB,-despFix,ebitda,llq],
+          backgroundColor:function(ctx){return(ctx.raw||0)>=0?'#3dd68c33':'#ff5a5a33';},
+          borderColor:function(ctx){return(ctx.raw||0)>=0?'#3dd68c':'#ff5a5a';},borderWidth:1.5,borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
+        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}});
   }
 
-  // ── Resultado Mensal ────────────────────────────────────────────────────
+  function calcMes(mn){
+    var r=filtrarDRE(DRE_RAW,DRE_STATE.ano,null,DRE_STATE.filial).filter(function(x){return(x.mes||'').slice(5,7)===mn;});
+    var f=somaFAT(r),d=somaDEV(r);
+    var sp=r.filter(function(x){var c=(x.cod_categ||'').trim();return(x.part||'').trim()==='CUS'&&(c==='6'||(x.des_subcateg||'').toLowerCase().includes('simples'));}).reduce(function(s,x){return s+Math.abs(parseFloat(x.valor)||0);},0);
+    var cv=Math.abs(somaCMV(r))+r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+Math.abs(parseFloat(x.valor)||0);},0);
+    var df=r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='1';}).reduce(function(s,x){return s+Math.abs(parseFloat(x.valor)||0);},0);
+    return{fat:f,ebt:f-d-sp-cv-df,mb:f>0?((f-cv)/f*100):null};
+  }
+
   destroyChart('dre-chart-resultado');
   var re2=document.getElementById('dre-chart-resultado');if(re2){
-    var ebtMes=MESES_NUM.map(function(mn){
-      var r=filtrarDRE(DRE_RAW,DRE_STATE.ano,null,DRE_STATE.filial)
-             .filter(function(x){return(x.mes||'').slice(5,7)===mn;});
-      var f=somaFAT(r), d=somaDEV(r);
-      var sp=r.filter(function(x){var cat=(x.cod_categ||'').trim();var des=(x.des_subcateg||'').toLowerCase();return(x.part||'').trim()==='CUS'&&(cat==='6'||des.includes('simples'));}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var cv=somaCMV(r)+r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var df=r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='1';}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      return f+d-sp-cv-df;
-    });
+    var ebtM=MESES_NUM.map(function(mn){return calcMes(mn).ebt||0;});
     CH['dre-chart-resultado']=new Chart(re2.getContext('2d'),{type:'bar',
-      data:{labels:MESES,datasets:[{label:'EBITDA',data:ebtMes,
-        backgroundColor:function(ctx){return ctx.raw>=0?'#3dd68c33':'#ff5a5a33';},
-        borderColor:function(ctx){return ctx.raw>=0?'#3dd68c':'#ff5a5a';},borderWidth:1,borderRadius:3}]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
-        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
-                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}
-    });
+      data:{labels:MESES,datasets:[{label:'EBITDA',data:ebtM,
+        backgroundColor:function(ctx){return(ctx.raw||0)>=0?'#3dd68c33':'#ff5a5a33';},
+        borderColor:function(ctx){return(ctx.raw||0)>=0?'#3dd68c':'#ff5a5a';},borderWidth:1,borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
+        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}});
   }
-
-  // ── Margens ──────────────────────────────────────────────────────────────
   destroyChart('dre-chart-margens');
   var me2=document.getElementById('dre-chart-margens');if(me2){
-    var calcM=function(mn){
-      var r=filtrarDRE(DRE_RAW,DRE_STATE.ano,null,DRE_STATE.filial)
-             .filter(function(x){return(x.mes||'').slice(5,7)===mn;});
-      return r;
-    };
-    var mbD=MESES_NUM.map(function(mn){var r=calcM(mn);var f=somaFAT(r);if(!f)return null;return((f+somaCMV(r))/f*100);});
-    var meD=MESES_NUM.map(function(mn){
-      var r=calcM(mn);var f=somaFAT(r);if(!f)return null;
-      var d=somaDEV(r);
-      var sp=r.filter(function(x){var c=(x.cod_categ||'').trim();return(x.part||'').trim()==='CUS'&&(c==='6'||(x.des_subcateg||'').toLowerCase().includes('simples'));}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var cv=somaCMV(r)+r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var df=r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='1';}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      return((f+d-sp-cv-df)/f*100);
-    });
     CH['dre-chart-margens']=new Chart(me2.getContext('2d'),{type:'line',
       data:{labels:MESES,datasets:[
-        {label:'Margem bruta %',data:mbD,borderColor:'#3dd68c',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,spanGaps:true},
-        {label:'EBITDA %',data:meD,borderColor:'#7c6fcd',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,borderDash:[4,2],spanGaps:true}
+        {label:'Margem bruta %',data:MESES_NUM.map(function(mn){return calcMes(mn).mb;}),borderColor:'#3dd68c',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,spanGaps:true},
+        {label:'EBITDA %',data:MESES_NUM.map(function(mn){var x=calcMes(mn);return x.fat>0?x.ebt/x.fat*100:null;}),borderColor:'#7c6fcd',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,borderDash:[4,2],spanGaps:true}
       ]},
       options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
         plugins:{tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+(c.raw!==null?c.raw.toFixed(1)+'%':'—');}}}},
-        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return v+'%';}}}}}
-    });
+        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return v.toFixed(0)+'%';}}}}}});
   }
 
-  // Despesas sidebar
   var despEl=document.getElementById('dre-desp-rows');if(despEl){
     var ds=subCUS(rows,['1'],null).slice(0,10);
     var mx=ds[0]?Math.abs(ds[0][1]):1;
@@ -2654,7 +2595,6 @@ function calcularDRE(){
 
   desenharTabelaDRE();
   renderDREAnualCharts();
-}
-</script>
+}</script>
 </body>
 </html>
