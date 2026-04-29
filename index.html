@@ -2161,6 +2161,9 @@ async function aplicarDRE(){
     try{ DRE_RAW = await fetchSheet('dre_mensal'); }
     catch(e){ console.warn('DRE fetch:',e); return; }
   }
+  console.log('[DRE] RAW total:',DRE_RAW.length,'cols:',DRE_RAW.length?Object.keys(DRE_RAW[0]).join(','):'none');
+  var rawParts={};DRE_RAW.forEach(function(r){var p=(r.part||'').trim();rawParts[p]=(rawParts[p]||0)+1;});
+  console.log('[DRE] RAW parts:',JSON.stringify(rawParts));
   calcularDRE();
 }
 
@@ -2477,7 +2480,14 @@ function calcularDRE(){
   var rows = filtrarDRE(DRE_RAW, DRE_STATE.ano, DRE_STATE.mes, DRE_STATE.filial);
   var byPart={};
   rows.forEach(function(r){var p=(r.part||'').trim();byPart[p]=(byPart[p]||0)+1;});
-  console.log('[DRE] Parts:',JSON.stringify(byPart),'total:',rows.length);
+  console.log('[DRE] Parts:',JSON.stringify(byPart),'total:',rows.length,'ano:',DRE_STATE.ano);
+  // Log primeiros registros de cada part para debug
+  var parts2=['FAT','DEV','CMV','CUS'];
+  parts2.forEach(function(p){
+    var sample=DRE_RAW.filter(function(r){return (r.part||'').trim()===p;}).slice(0,2);
+    if(sample.length) console.log('[DRE] '+p+' sample: mes='+sample[0].mes+' filial='+sample[0].filial+' cod_categ='+sample[0].cod_categ+' valor='+sample[0].valor);
+    else console.log('[DRE] '+p+': NENHUM REGISTRO NO RAW');
+  });
 
   var fat = somaFAT(rows);
   var dev = somaDEV(rows);  // positivo no banco = devolução
