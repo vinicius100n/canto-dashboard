@@ -1216,8 +1216,6 @@ function soma(rows, part, desInc, desExc, categ){
   }).reduce(function(s,r){return s+Math.abs(parseFloat(r.valor)||0);},0);
 }
 
-function somaFAT(rows){ return soma(rows,'FAT'); }
-function somaDEV(rows){ return soma(rows,'DEV'); }
 function somaSimples(rows){ return soma(rows,'CUS','simples'); }
 
 // Custos variáveis (dre_grupo=0)
@@ -2193,43 +2191,8 @@ function somaDEV(rows){
   return rows.filter(function(r){return r.part==='DEV';})
              .reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
 }
-function somaCMV(rows){
-  return rows.filter(function(r){return r.part==='CMV';})
-             .reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
-}
 // CUS por dre_grupo
-function somaCUS(rows, grupos){
-  return rows.filter(function(r){
-    if(r.part!=='CUS') return false;
-    return grupos.indexOf(r.cod_categ) >= 0;
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
-}
 // Sub-itens de CUS para drill
-function subCUS(rows, grupos, desInc){
-  var agg={};
-  rows.filter(function(r){
-    if(r.part!=='CUS') return false;
-    if(grupos.length && grupos.indexOf(r.cod_categ) < 0) return false;
-    if(desInc){
-      var des=(r.des_subcateg||'').toLowerCase();
-      if(!des.includes(desInc)) return false;
-    }
-    return true;
-  }).forEach(function(r){
-    var k=r.des_subcateg||r.cod_subcateg||'—';
-    agg[k]=(agg[k]||0)+(parseFloat(r.valor)||0);
-  });
-  return Object.entries(agg).filter(function(e){return Math.abs(e[1])>0;})
-               .sort(function(a,b){return Math.abs(b[1])-Math.abs(a[1]);});
-}
-function subFAT(rows){
-  var agg={};
-  rows.filter(function(r){return r.part==='FAT';}).forEach(function(r){
-    var k=r.des_categ||'—';
-    agg[k]=(agg[k]||0)+(parseFloat(r.valor)||0);
-  });
-  return Object.entries(agg).sort(function(a,b){return b[1]-a[1];});
-}
 
 // ── CALCULAR POR MÊS (para colunas da tabela) ─────────────────────────────────
 function calcMeses(fn){
@@ -2242,186 +2205,6 @@ function calcMeses(fn){
 }
 
 // ── CALCULAR PRINCIPAL ────────────────────────────────────────────────────────
-function calcularDRE(){
-  var rows = filtrarDRE(DRE_RAW, DRE_STATE.ano, DRE_STATE.mes, DRE_STATE.filial);
-
-  // === Linha 1: Receita Operacional Bruta ===
-  var fat = somaFAT(rows);  // SUM(fDREfat[VALOR])
-
-  // === Linha 2: (-) Deduções da Receita Bruta ===
-  var dev = somaDEV(rows);  // SUM(fDREdev[VALOR]) — já é negativo
-  // Simples: CUS com conta específica do simples (no Power BI está em Deduções via dPlanoDeContas)
-  // Como identificar: no Excel dPlanoDeContas, contas do simples são mapeadas para ordem=2 (Deduções)
-  // Na nossa query, simples está em CUS com des_subcateg contendo 'simples'
-  var simples = somaCUS(rows,['0','1','6']).toString();  // placeholder — veja abaixo
-
-  // Na realidade: DEV já inclui as devoluções. Simples é um CUS especial.
-  // O Power BI mapeia conta do simples para "Deduções" via dPlanoDeContas.xlsx
-  // Na query ETL, simples vem como CUS. Precisamos identificá-lo pelo des_subcateg.
-  var simplesVal = rows.filter(function(r){
-    if(r.part!=='CUS') return false;
-    var des=(r.des_subcateg||r.des_categ||'').toLowerCase();
-    return des.includes('simples') || des.includes('simei') || des.includes('das ');
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
-
-  var totalDed = dev + simplesVal;  // DEV já negativo + simples positivo (ambos reduzem receita)
-  var recLiq   = fat + totalDed;    // fat - |dev| - simples
-
-  // === Linha 4: (-) Custos Operacionais da Receita ===
-  // CMV (fDREcmv) + CUS dre_grupo='0' (Custos Variáveis) exceto simples
-  var cmv = somaCMV(rows);  // fDREcmv — já negativo (custo saída)
-  var cusVar = rows.filter(function(r){
-    if(r.part!=='CUS') return false;
-    if(r.cod_categ!=='0') return false;
-    var des=(r.des_subcateg||r.des_categ||'').toLowerCase();
-    if(des.includes('simples')||des.includes('simei')||des.includes('das ')) return false;
-    return true;
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
-
-  // Dentro de cusVar: comissão, frete, etc.
-  var comissao = rows.filter(function(r){
-    return r.part==='CUS' && r.cod_categ==='0' &&
-           (r.des_subcateg||'').toLowerCase().includes('comiss');
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
-
-  var totalCOP = cmv + cusVar;  // CMV já negativo + cusVar positivo (ambos reduzem)
-  var resB = recLiq + totalCOP; // recLiq - |CMV| - |cusVar|
-
-  // === Linha 6: (-) Despesas Operacional ===
-  // CUS dre_grupo='1' (Custos Fixos) + dre_grupo='6' (Custo Fin.Fixo)
-  var despFix = rows.filter(function(r){
-    return r.part==='CUS' && (r.cod_categ==='1'||r.cod_categ==='6');
-  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
-
-  var ebitda = resB - despFix;
-
-  // === Linha 8: (+−) Não Operacional ===
-  var noper = 0;  // sem dados mapeados ainda
-
-  var lucroAntes = ebitda + noper;
-  var cs=0, ir=0;
-  var llq = lucroAntes - cs - ir;
-
-  // Guardar para tabela
-  window._DRE_V = {
-    fat:fat, dev:dev, simplesVal:simplesVal, totalDed:totalDed, recLiq:recLiq,
-    cmv:cmv, cusVar:cusVar, comissao:comissao, totalCOP:totalCOP, resB:resB,
-    despFix:despFix, ebitda:ebitda, noper:noper, lucroAntes:lucroAntes, llq:llq,
-    rows:rows
-  };
-
-  // ── KPIs ─────────────────────────────────────────────────────────────────
-  function setKV(id,v){
-    var el=document.getElementById(id);if(!el)return;
-    el.textContent=brl(v);el.className='kv sm '+(v>=0?'pos-v':'neg-v');
-  }
-  setKV('dre-fat',fat);
-  setKV('dre-ded',totalDed);     // negativo pois DEV já é negativo
-  setKV('dre-liq',recLiq);
-  setKV('dre-bruto',resB);
-  setKV('dre-ebitda',ebitda);
-  setKV('dre-lucro',llq);
-  var lc=document.getElementById('dre-lucro-card');
-  if(lc)lc.className='kcard '+(llq>=0?'grn':'red');
-
-  if(fat>0){
-    setText('dre-cmv-p',(Math.abs(cmv)/fat*100).toFixed(1)+'%');
-    var cb=document.getElementById('dre-cmv-bar');if(cb)cb.style.width=Math.min(Math.abs(cmv)/fat*100,100)+'%';
-    setText('dre-cf-p',(despFix/fat*100).toFixed(1)+'%');
-    var cfb=document.getElementById('dre-cf-bar');if(cfb)cfb.style.width=Math.min(despFix/fat*100,100)+'%';
-    var cob=((fat/(Math.abs(totalCOP)+despFix||1))*100).toFixed(1);
-    setText('dre-cob',cob+'%');
-    var cobB=document.getElementById('dre-cob-bar');if(cobB)cobB.style.width=Math.min(parseFloat(cob)/2,100)+'%';
-    var pe=Math.round(despFix/((fat-Math.abs(totalCOP))/fat||0.01));
-    setText('dre-pe','R$'+Math.abs(pe).toLocaleString('pt-BR')+'/mês');
-  }
-
-  var subLbl=(DRE_STATE.mes==='Todos'?'Jan–Dez ':''+DRE_STATE.mes+' ')+DRE_STATE.ano+
-             ' · '+(DRE_STATE.filial==='Todas'?'Todas as filiais':DRE_STATE.filial);
-  setText('dre-sub-lbl',subLbl);
-
-  // ── CASCATA ───────────────────────────────────────────────────────────────
-  destroyChart('dre-chart-cascata');
-  var ce=document.getElementById('dre-chart-cascata');if(ce){
-    CH['dre-chart-cascata']=new Chart(ce.getContext('2d'),{type:'bar',
-      data:{labels:['Fat. Bruto','Deduções','Rec. Líq.','CMV+CusVar','Res. Bruto','Desp. Op.','EBITDA','Luc. Líq.'],
-        datasets:[{data:[fat, totalDed, recLiq, totalCOP, resB, -despFix, ebitda, llq],
-          backgroundColor:function(ctx){return ctx.raw>=0?'#3dd68c33':'#ff5a5a33';},
-          borderColor:function(ctx){return ctx.raw>=0?'#3dd68c':'#ff5a5a';},
-          borderWidth:1.5,borderRadius:3}]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
-        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
-                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}
-    });
-  }
-
-  // ── RESULTADO MENSAL ──────────────────────────────────────────────────────
-  destroyChart('dre-chart-resultado');
-  var re=document.getElementById('dre-chart-resultado');if(re){
-    var ebtMes=calcMeses(function(r){
-      var f=somaFAT(r), d=somaDEV(r);
-      var sp=r.filter(function(x){return x.part==='CUS'&&(x.des_subcateg||'').toLowerCase().includes('simples');})
-              .reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var cv=somaCMV(r)+r.filter(function(x){return x.part==='CUS'&&x.cod_categ==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');})
-              .reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var df=r.filter(function(x){return x.part==='CUS'&&(x.cod_categ==='1'||x.cod_categ==='6');})
-              .reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      return f+d-sp+cv-df;
-    });
-    CH['dre-chart-resultado']=new Chart(re.getContext('2d'),{type:'bar',
-      data:{labels:MESES,datasets:[{label:'EBITDA',data:ebtMes,
-        backgroundColor:function(ctx){return ctx.raw>=0?'#3dd68c33':'#ff5a5a33';},
-        borderColor:function(ctx){return ctx.raw>=0?'#3dd68c':'#ff5a5a';},borderWidth:1,borderRadius:3}]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
-        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
-                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}
-    });
-  }
-
-  // ── MARGENS MENSAIS ────────────────────────────────────────────────────────
-  destroyChart('dre-chart-margens');
-  var me=document.getElementById('dre-chart-margens');if(me){
-    var mbD=calcMeses(function(r){
-      var f=somaFAT(r);if(!f)return null;
-      return ((f+somaDEV(r)+somaCMV(r))/f*100);
-    });
-    var meD=calcMeses(function(r){
-      var f=somaFAT(r);if(!f)return null;
-      var d=somaDEV(r), sp=r.filter(function(x){return x.part==='CUS'&&(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var cv=somaCMV(r)+r.filter(function(x){return x.part==='CUS'&&x.cod_categ==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      var df=r.filter(function(x){return x.part==='CUS'&&(x.cod_categ==='1'||x.cod_categ==='6');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
-      return ((f+d-sp+cv-df)/f*100);
-    });
-    CH['dre-chart-margens']=new Chart(me.getContext('2d'),{type:'line',
-      data:{labels:MESES,datasets:[
-        {label:'Margem bruta %',data:mbD,borderColor:'#3dd68c',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,spanGaps:true},
-        {label:'EBITDA %',data:meD,borderColor:'#7c6fcd',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,borderDash:[4,2],spanGaps:true}
-      ]},
-      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-        plugins:{tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+(c.raw!==null?c.raw.toFixed(1)+'%':'—');}}}},
-        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
-                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return v+'%';}}}}}
-    });
-  }
-
-  // Despesas sidebar
-  var despEl=document.getElementById('dre-desp-rows');if(despEl){
-    var ds=subCUS(rows,['1','6'],null).slice(0,10);
-    var mx=ds[0]?Math.abs(ds[0][1]):1;
-    var COLORS=['#ff5a5a','#ff5a5a','#c8a96e','#378add','#7c6fcd','#4ecdc4','#3dd68c','#f5a623','#6b6b80','#6b6b80'];
-    despEl.innerHTML=ds.map(function(d,i){
-      return '<div class="br"><span class="br-nm">'+d[0]+'</span>'+
-        '<div class="br-b"><div class="br-f" style="background:'+COLORS[i%COLORS.length]+';width:'+(Math.abs(d[1])/mx*100).toFixed(0)+'%"></div></div>'+
-        '<span class="br-v">'+brl(Math.abs(d[1]))+'</span>'+
-        '<span class="br-p">'+(fat>0?(Math.abs(d[1])/fat*100).toFixed(1):'0')+'%</span></div>';
-    }).join('');
-  }
-
-  desenharTabelaDRE();
-  renderDREAnualCharts();
-}
 
 // ── TABELA DRE — layout idêntico ao Power BI ─────────────────────────────────
 function desenharTabelaDRE(){
@@ -2629,6 +2412,248 @@ function renderDREAnualCharts(){
     var CO=['#ff5a5a','#ff5a5a','#c8a96e','#378add','#7c6fcd','#6b6b80'];
     compEl.innerHTML=ds.map(function(d,i){return'<div class="br"><span class="br-nm">'+d[0]+'</span><div class="br-b"><div class="br-f" style="background:'+CO[i]+';width:'+(Math.abs(d[1])/mx*100).toFixed(0)+'%"></div></div><span class="br-v">'+brl(Math.abs(d[1]))+'</span></div>';}).join('');
   }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+//  DRE CORRIGIDO — substitui calcularDRE() e funções auxiliares
+//
+//  Problemas corrigidos:
+//  1. cod_categ chega como string do CSV — trim() em todos os comparadores
+//  2. cusVar estava positivo mas devia ser negativo (reduz resultado)
+//  3. despFix estava sendo subtraído 2x (resB - despFix já correto, mas 
+//     EBITDA=resB quando despFix=0 indica que CUS não está sendo lido)
+//  4. simples identificado pelo cod_categ='6' OU des_subcateg
+// ══════════════════════════════════════════════════════════════════════
+
+// Helpers de soma — trim() garante que espaços extras do CSV não quebrem
+function somaFAT(rows){
+  return rows.filter(function(r){return(r.part||'').trim()==='FAT';})
+             .reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+}
+function somaDEV(rows){
+  return rows.filter(function(r){return(r.part||'').trim()==='DEV';})
+             .reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+}
+function somaCMV(rows){
+  return rows.filter(function(r){return(r.part||'').trim()==='CMV';})
+             .reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+}
+function somaCUS(rows, grupos){
+  return rows.filter(function(r){
+    if((r.part||'').trim()!=='CUS') return false;
+    return grupos.indexOf((r.cod_categ||'').trim()) >= 0;
+  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+}
+function subCUS(rows, grupos, desInc){
+  var agg={};
+  rows.filter(function(r){
+    if((r.part||'').trim()!=='CUS') return false;
+    if(grupos.length && grupos.indexOf((r.cod_categ||'').trim()) < 0) return false;
+    if(desInc){
+      var des=(r.des_subcateg||'').toLowerCase();
+      if(!des.includes(desInc)) return false;
+    }
+    return true;
+  }).forEach(function(r){
+    var k=(r.des_subcateg||r.cod_subcateg||'—').trim();
+    agg[k]=(agg[k]||0)+(parseFloat(r.valor)||0);
+  });
+  return Object.entries(agg).filter(function(e){return Math.abs(e[1])>0.01;})
+               .sort(function(a,b){return Math.abs(b[1])-Math.abs(a[1]);});
+}
+function subFAT(rows){
+  var agg={};
+  rows.filter(function(r){return(r.part||'').trim()==='FAT';}).forEach(function(r){
+    var k=(r.des_categ||'—').trim();
+    agg[k]=(agg[k]||0)+(parseFloat(r.valor)||0);
+  });
+  return Object.entries(agg).sort(function(a,b){return b[1]-a[1];});
+}
+
+function calcularDRE(){
+  var rows = filtrarDRE(DRE_RAW, DRE_STATE.ano, DRE_STATE.mes, DRE_STATE.filial);
+
+  // Debug: contar linhas por PART
+  var byPart={};
+  rows.forEach(function(r){var p=(r.part||'').trim();byPart[p]=(byPart[p]||0)+1;});
+  console.log('DRE rows por PART:', byPart, 'total:', rows.length);
+
+  // ── Linha 1: Receita Operacional Bruta ─────────────────────────────────────
+  // fDREfat: SUM(quantidade * vr_venda) onde operacao IN(1,25)
+  var fat = somaFAT(rows);
+
+  // ── Linha 2: (-) Deduções ──────────────────────────────────────────────────
+  // fDREdev: SUM(-quantidade * vr_venda) — já vem negativo
+  var dev = somaDEV(rows);
+  // Simples Nacional: CUS com dre_grupo='6' OU des_subcateg contendo 'simples'
+  // No Power BI está em Deduções via dPlanoDeContas.xlsx (conta do simples mapeada)
+  var simplesVal = rows.filter(function(r){
+    if((r.part||'').trim()!=='CUS') return false;
+    var cat = (r.cod_categ||'').trim();
+    var des = (r.des_subcateg||'').toLowerCase();
+    return cat==='6' || des.includes('simples') || des.includes('simei') || des.includes('das ');
+  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+
+  var totalDed = dev - simplesVal;  // dev já negativo; simples é positivo → subtrai
+  var recLiq   = fat + totalDed;    // = fat - |dev| - simples
+
+  // ── Linha 4: (-) Custos Operacionais da Receita ───────────────────────────
+  // CMV: fDREcmv — valor NEGATIVO (custo da mercadoria vendida)
+  var cmv = somaCMV(rows);
+  // Custos Variáveis: CUS dre_grupo='0', exceto simples
+  var cusVar0 = rows.filter(function(r){
+    if((r.part||'').trim()!=='CUS') return false;
+    if((r.cod_categ||'').trim()!=='0') return false;
+    var des=(r.des_subcateg||'').toLowerCase();
+    if(des.includes('simples')||des.includes('simei')||des.includes('das ')) return false;
+    return true;
+  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+
+  var comissao = rows.filter(function(r){
+    return (r.part||'').trim()==='CUS' && (r.cod_categ||'').trim()==='0' &&
+           (r.des_subcateg||'').toLowerCase().includes('comiss');
+  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+
+  // totalCOP: CMV (negativo) + custos variáveis (positivos no banco, mas representam saída)
+  var totalCOP = cmv - cusVar0;  // ambos reduzem receita líquida
+  var resB = recLiq + totalCOP;  // resB = recLiq - |cmv| - |cusVar|
+
+  // ── Linha 6: (-) Despesas Operacional ─────────────────────────────────────
+  // CUS dre_grupo='1' (Custos Fixos)
+  // Simples foi para Deduções, então aqui só grupo='1'
+  var despFix = rows.filter(function(r){
+    if((r.part||'').trim()!=='CUS') return false;
+    var cat=(r.cod_categ||'').trim();
+    return cat==='1';
+  }).reduce(function(s,r){return s+(parseFloat(r.valor)||0);},0);
+
+  console.log('DRE calc: fat='+fat+' dev='+dev+' simples='+simplesVal+
+              ' cmv='+cmv+' cusVar='+cusVar0+' despFix='+despFix);
+
+  var ebitda = resB - despFix;
+  var noper  = 0;
+  var lucroAntes = ebitda + noper;
+  var cs=0, ir=0;
+  var llq = lucroAntes;
+
+  window._DRE_V = {
+    fat:fat, dev:dev, simplesVal:simplesVal, totalDed:totalDed, recLiq:recLiq,
+    cmv:cmv, cusVar:cusVar0, comissao:comissao, totalCOP:totalCOP, resB:resB,
+    despFix:despFix, ebitda:ebitda, noper:noper, lucroAntes:lucroAntes, llq:llq,
+    rows:rows
+  };
+
+  // ── KPIs ──────────────────────────────────────────────────────────────────
+  function setKV(id,v){
+    var el=document.getElementById(id);if(!el)return;
+    el.textContent=brl(v);el.className='kv sm '+(v>=0?'pos-v':'neg-v');
+  }
+  setKV('dre-fat',fat);
+  setKV('dre-ded',totalDed);
+  setKV('dre-liq',recLiq);
+  setKV('dre-bruto',resB);
+  setKV('dre-ebitda',ebitda);
+  setKV('dre-lucro',llq);
+  var lc=document.getElementById('dre-lucro-card');
+  if(lc)lc.className='kcard '+(llq>=0?'grn':'red');
+
+  if(fat>0){
+    var cmvPct = Math.abs(cmv)/fat*100;
+    var cfPct  = despFix/fat*100;
+    setText('dre-cmv-p', cmvPct.toFixed(1)+'%');
+    var cb=document.getElementById('dre-cmv-bar');if(cb)cb.style.width=Math.min(cmvPct,100)+'%';
+    setText('dre-cf-p',  cfPct.toFixed(1)+'%');
+    var cfb=document.getElementById('dre-cf-bar');if(cfb)cfb.style.width=Math.min(cfPct,100)+'%';
+    var totCusto = Math.abs(totalCOP)+despFix;
+    var cob = totCusto>0?((fat/totCusto)*100).toFixed(1):'0';
+    setText('dre-cob', cob+'%');
+    var cobB=document.getElementById('dre-cob-bar');if(cobB)cobB.style.width=Math.min(parseFloat(cob)/2,100)+'%';
+    var pe = totCusto>0?Math.round(despFix/((fat-Math.abs(totalCOP||1))/fat)):0;
+    setText('dre-pe','R$'+Math.abs(pe).toLocaleString('pt-BR')+'/mês');
+  }
+
+  var subLbl=(DRE_STATE.mes==='Todos'?'Jan–Dez ':''+DRE_STATE.mes+' ')+DRE_STATE.ano+
+             ' · '+(DRE_STATE.filial==='Todas'?'Todas as filiais':DRE_STATE.filial);
+  setText('dre-sub-lbl',subLbl);
+
+  // ── Cascata ──────────────────────────────────────────────────────────────
+  destroyChart('dre-chart-cascata');
+  var ce=document.getElementById('dre-chart-cascata');if(ce){
+    CH['dre-chart-cascata']=new Chart(ce.getContext('2d'),{type:'bar',
+      data:{labels:['Fat. Bruto','Deduções','Rec. Líq.','Cust. Oper.','Res. Bruto','Desp. Op.','EBITDA','Luc. Líq.'],
+        datasets:[{data:[fat, totalDed, recLiq, totalCOP, resB, -despFix, ebitda, llq],
+          backgroundColor:function(ctx){return ctx.raw>=0?'#3dd68c33':'#ff5a5a33';},
+          borderColor:function(ctx){return ctx.raw>=0?'#3dd68c':'#ff5a5a';},
+          borderWidth:1.5,borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
+        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
+                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}
+    });
+  }
+
+  // ── Resultado Mensal ────────────────────────────────────────────────────
+  destroyChart('dre-chart-resultado');
+  var re2=document.getElementById('dre-chart-resultado');if(re2){
+    var ebtMes=MESES_NUM.map(function(mn){
+      var r=filtrarDRE(DRE_RAW,DRE_STATE.ano,null,DRE_STATE.filial)
+             .filter(function(x){return(x.mes||'').slice(5,7)===mn;});
+      var f=somaFAT(r), d=somaDEV(r);
+      var sp=r.filter(function(x){var cat=(x.cod_categ||'').trim();var des=(x.des_subcateg||'').toLowerCase();return(x.part||'').trim()==='CUS'&&(cat==='6'||des.includes('simples'));}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
+      var cv=somaCMV(r)+r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
+      var df=r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='1';}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
+      return f+d-sp-cv-df;
+    });
+    CH['dre-chart-resultado']=new Chart(re2.getContext('2d'),{type:'bar',
+      data:{labels:MESES,datasets:[{label:'EBITDA',data:ebtMes,
+        backgroundColor:function(ctx){return ctx.raw>=0?'#3dd68c33':'#ff5a5a33';},
+        borderColor:function(ctx){return ctx.raw>=0?'#3dd68c':'#ff5a5a';},borderWidth:1,borderRadius:3}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{tooltip:{callbacks:{label:function(c){return brl(c.raw);}}}},
+        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},
+                y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return Math.round(v/1000)+'k';}}}}}
+    });
+  }
+
+  // ── Margens ──────────────────────────────────────────────────────────────
+  destroyChart('dre-chart-margens');
+  var me2=document.getElementById('dre-chart-margens');if(me2){
+    var calcM=function(mn){
+      var r=filtrarDRE(DRE_RAW,DRE_STATE.ano,null,DRE_STATE.filial)
+             .filter(function(x){return(x.mes||'').slice(5,7)===mn;});
+      return r;
+    };
+    var mbD=MESES_NUM.map(function(mn){var r=calcM(mn);var f=somaFAT(r);if(!f)return null;return((f+somaCMV(r))/f*100);});
+    var meD=MESES_NUM.map(function(mn){
+      var r=calcM(mn);var f=somaFAT(r);if(!f)return null;
+      var d=somaDEV(r);
+      var sp=r.filter(function(x){var c=(x.cod_categ||'').trim();return(x.part||'').trim()==='CUS'&&(c==='6'||(x.des_subcateg||'').toLowerCase().includes('simples'));}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
+      var cv=somaCMV(r)+r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='0'&&!(x.des_subcateg||'').toLowerCase().includes('simples');}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
+      var df=r.filter(function(x){return(x.part||'').trim()==='CUS'&&(x.cod_categ||'').trim()==='1';}).reduce(function(s,x){return s+(parseFloat(x.valor)||0);},0);
+      return((f+d-sp-cv-df)/f*100);
+    });
+    CH['dre-chart-margens']=new Chart(me2.getContext('2d'),{type:'line',
+      data:{labels:MESES,datasets:[
+        {label:'Margem bruta %',data:mbD,borderColor:'#3dd68c',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,spanGaps:true},
+        {label:'EBITDA %',data:meD,borderColor:'#7c6fcd',borderWidth:1.5,pointRadius:3,fill:false,tension:.3,borderDash:[4,2],spanGaps:true}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+(c.raw!==null?c.raw.toFixed(1)+'%':'—');}}}},
+        scales:{x:{grid:{color:GC},ticks:{font:{size:10}}},y:{grid:{color:GC},ticks:{font:{size:10},callback:function(v){return v+'%';}}}}}
+    });
+  }
+
+  // Despesas sidebar
+  var despEl=document.getElementById('dre-desp-rows');if(despEl){
+    var ds=subCUS(rows,['1'],null).slice(0,10);
+    var mx=ds[0]?Math.abs(ds[0][1]):1;
+    var CO=['#ff5a5a','#ff5a5a','#c8a96e','#378add','#7c6fcd','#4ecdc4','#3dd68c','#f5a623','#6b6b80','#6b6b80'];
+    despEl.innerHTML=ds.map(function(d,i){return'<div class="br"><span class="br-nm">'+d[0]+'</span><div class="br-b"><div class="br-f" style="background:'+CO[i%CO.length]+';width:'+(Math.abs(d[1])/mx*100).toFixed(0)+'%"></div></div><span class="br-v">'+brl(Math.abs(d[1]))+'</span><span class="br-p">'+(fat>0?(Math.abs(d[1])/fat*100).toFixed(1):'0')+'%</span></div>';}).join('');
+  }
+
+  desenharTabelaDRE();
+  renderDREAnualCharts();
 }
 </script>
 </body>
